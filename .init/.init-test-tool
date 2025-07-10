@@ -1,0 +1,4 @@
+{
+    "command": "npm run test",
+    "working_directory": "/home/kavia/workspace/code-generation/collaborative-event-scheduler-33367/scheduler_frontend"
+}
