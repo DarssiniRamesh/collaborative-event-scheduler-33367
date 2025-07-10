@@ -3,6 +3,7 @@ import CalendarToolbar from './CalendarToolbar';
 import EventDialog from './EventDialog';
 import EventPopover from './EventPopover';
 import { useAuth } from '../App';
+import { useWebSocket } from './WebSocketProvider';
 import './Calendar.css';
 
 /**
@@ -43,6 +44,10 @@ export default function Calendar({ token }) {
   const [dialogProps, setDialogProps] = useState({ open: false, event: null });
   const [popoverProps, setPopoverProps] = useState({ show: false, event: null, anchor: null });
 
+  // Always call hooks & helpers unconditionally (fix ESLint/react-hooks error)
+  const wsCtx = useWebSocket ? useWebSocket() : {};
+  const subscribeEventUpdates = wsCtx.subscribeEventUpdates || (() => null);
+
   // Fetch events for visible range
   useEffect(() => {
     async function fetchEvents() {
@@ -78,6 +83,24 @@ export default function Calendar({ token }) {
     }
     if (user && token) fetchEvents();
   }, [user, token, view, cursorDate]);
+
+  // Subscribe to WebSocket real-time updates
+  useEffect(() => {
+    if (!subscribeEventUpdates) return;
+    // Re-fetch events for any event change from server
+    const unsub = subscribeEventUpdates((type, payload) => {
+      if (
+        type === "event_added" ||
+        type === "event_updated" ||
+        type === "event_deleted" ||
+        type === "participant_changed"
+      ) {
+        // Slight timeout for backend consistency
+        setTimeout(() => setCursorDate((d) => new Date(d)), 250);
+      }
+    });
+    return () => { if (unsub) unsub(); };
+  }, [subscribeEventUpdates]);
 
   // CRUD operations
   async function handleCreate(eventData) {

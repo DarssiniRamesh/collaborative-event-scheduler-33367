@@ -7,6 +7,7 @@ import './App.css';
 
 // New calendar-related imports
 import Calendar from './components/Calendar';
+import { WebSocketProvider } from "./components/WebSocketProvider";
 
 const CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"; // TODO: Set this value
 
@@ -140,29 +141,33 @@ function LoginPage() {
   );
 }
 
+/* Duplicate import removed */
+
 function Dashboard() {
   const { user, logout, token } = useAuth();
   return (
-    <div className="App">
-      <header className="App-header" style={{ paddingBottom: 0 }}>
-        <ThemeToggle />
-        <div style={{ alignSelf: 'flex-end', marginBottom: 16 }}>
-          <button onClick={logout} className="theme-toggle" style={{ right: 120, top: 20 }}>
-            Logout
-          </button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14 }}>
-          <img src={user?.picture} alt="profile" style={{ borderRadius: '50%', width: 64, height: 64 }} />
-          <div>
-            <h2 style={{ margin: 0 }}>Welcome, {user?.name || 'User'}!</h2>
-            <p style={{ margin: 0 }}>{user?.email}</p>
+    <WebSocketProvider token={token}>
+      <div className="App">
+        <header className="App-header" style={{ paddingBottom: 0 }}>
+          <ThemeToggle />
+          <div style={{ alignSelf: 'flex-end', marginBottom: 16 }}>
+            <button onClick={logout} className="theme-toggle" style={{ right: 120, top: 20 }}>
+              Logout
+            </button>
           </div>
-        </div>
-      </header>
-      <main>
-        <Calendar token={token} />
-      </main>
-    </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14 }}>
+            <img src={user?.picture} alt="profile" style={{ borderRadius: '50%', width: 64, height: 64 }} />
+            <div>
+              <h2 style={{ margin: 0 }}>Welcome, {user?.name || 'User'}!</h2>
+              <p style={{ margin: 0 }}>{user?.email}</p>
+            </div>
+          </div>
+        </header>
+        <main>
+          <Calendar token={token} />
+        </main>
+      </div>
+    </WebSocketProvider>
   );
 }
 
