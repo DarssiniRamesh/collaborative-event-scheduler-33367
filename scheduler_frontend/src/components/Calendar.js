@@ -4,6 +4,7 @@ import EventDialog from './EventDialog';
 import EventPopover from './EventPopover';
 import { useAuth } from '../App';
 import { useWebSocket } from './WebSocketProvider';
+import NotificationBanner from './NotificationBanner';
 import './Calendar.css';
 
 /**
@@ -44,9 +45,13 @@ export default function Calendar({ token }) {
   const [dialogProps, setDialogProps] = useState({ open: false, event: null });
   const [popoverProps, setPopoverProps] = useState({ show: false, event: null, anchor: null });
 
+  // New: For UI confirmation banner (success/info for email sent)
+  const [notif, setNotif] = useState({ message: "", type: "info" });
+
   // Always call hooks & helpers unconditionally (fix ESLint/react-hooks error)
-  const wsCtx = useWebSocket ? useWebSocket() : {};
-  const subscribeEventUpdates = wsCtx.subscribeEventUpdates || (() => null);
+  const wsCtx = useWebSocket();
+  const subscribeEventUpdates = wsCtx?.subscribeEventUpdates || (() => null);
+  const showNotification = wsCtx?.showNotification || ((msg, type) => setNotif({ message: msg, type: type || "info" }));
 
   // Fetch events for visible range
   useEffect(() => {
@@ -87,7 +92,7 @@ export default function Calendar({ token }) {
   // Subscribe to WebSocket real-time updates
   useEffect(() => {
     if (!subscribeEventUpdates) return;
-    // Re-fetch events for any event change from server
+    // Re-fetch events for any event change from server, and provide notification for backend-triggered emails
     const unsub = subscribeEventUpdates((type, payload) => {
       if (
         type === "event_added" ||
@@ -97,6 +102,25 @@ export default function Calendar({ token }) {
       ) {
         // Slight timeout for backend consistency
         setTimeout(() => setCursorDate((d) => new Date(d)), 250);
+      }
+
+      // Listen for potential WS push: email sent/reminder/invitation
+      if (
+        type === "email_notification_sent" ||
+        type === "reminder_sent"
+      ) {
+        showNotification(
+          payload?.message ||
+            (type === "reminder_sent"
+              ? "Reminder email sent to all participants!"
+              : "Notification sent!"),
+          "success"
+        );
+      }
+
+      // Experimental: If backend piggybacks "notification" in payload
+      if (payload && payload.notification) {
+        showNotification(payload.notification, "success");
       }
     });
     return () => { if (unsub) unsub(); };
@@ -114,6 +138,16 @@ export default function Calendar({ token }) {
         setDialogProps({ open: false, event: null });
         // Refetch events
         setTimeout(() => setCursorDate(new Date(cursorDate)), 200);
+        // Check for backend-triggered email/invitation notification in API response, if present
+        const respBody = await res.json().catch(() => ({}));
+        if (respBody && respBody.notification) {
+          showNotification(respBody.notification, "success");
+        } else {
+          // Optimistic default: show "Invitation(s) sent" if participants included
+          if (eventData.participants && eventData.participants.length > 1) {
+            showNotification("Invitations sent to participants!", "success");
+          }
+        }
       }
     } catch (e) {}
   }
@@ -127,6 +161,11 @@ export default function Calendar({ token }) {
       if (res.ok) {
         setDialogProps({ open: false, event: null });
         setTimeout(() => setCursorDate(new Date(cursorDate)), 200);
+        // Notification on event update (potentially reminders)
+        const respBody = await res.json().catch(() => ({}));
+        if (respBody && respBody.notification) {
+          showNotification(respBody.notification, "success");
+        }
       }
     } catch (e) {}
   }
@@ -141,6 +180,28 @@ export default function Calendar({ token }) {
         setTimeout(() => setCursorDate(new Date(cursorDate)), 200);
       }
     } catch (e) {}
+  }
+
+  // Example: Remind/notify API for manual triggers (expand here if applicable)
+  async function handleSendReminder(eventId) {
+    try {
+      const res = await fetch(`/api/events/${eventId}/remind`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const respBody = await res.json().catch(() => ({}));
+        if (respBody && respBody.notification) {
+          showNotification(respBody.notification, "success");
+        } else {
+          showNotification("Reminder email sent!", "success");
+        }
+      } else {
+        showNotification("Failed to send reminder.", "warn");
+      }
+    } catch (e) {
+      showNotification("Failed to send reminder.", "error");
+    }
   }
 
   // Handle click on empty day/timeslot
@@ -216,6 +277,11 @@ export default function Calendar({ token }) {
 
   return (
     <div className="calendar-main">
+      <NotificationBanner
+        message={notif.message}
+        type={notif.type}
+        onClose={() => setNotif({ message: "", type: "info" })}
+      />
       <CalendarToolbar
         view={view}
         setView={setView}
